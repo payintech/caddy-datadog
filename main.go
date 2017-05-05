@@ -37,7 +37,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 	datadog := &DatadogModule{
 		daemonAddress: "127.0.0.1:8125",
 		tags:          []string{},
-		rate:          2.0,
+		rate:          1.0,
 	}
 	if glDatadogMetrics == nil {
 		ipAddressRegex := regexp.MustCompile(`^[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}:[0-9]{1,5}$`)
@@ -93,13 +93,20 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 					//	glDatadogMetrics.response4xxCount,
 					//	glDatadogMetrics.response5xxCount,
 					//)
+					totalResponses := glDatadogMetrics.response1xxCount +
+						glDatadogMetrics.response2xxCount +
+						glDatadogMetrics.response3xxCount +
+						glDatadogMetrics.response4xxCount +
+						glDatadogMetrics.response5xxCount
 					daemonClient.Gauge(
-						"core.request_per_s",
-						glDatadogMetrics.response1xxCount+
-							glDatadogMetrics.response2xxCount+
-							glDatadogMetrics.response3xxCount+
-							glDatadogMetrics.response4xxCount+
-							glDatadogMetrics.response5xxCount,
+						"core.requests.per_s",
+						totalResponses,
+						nil,
+						datadog.rate,
+					)
+					daemonClient.Gauge(
+						"core.requests.total",
+						totalResponses,
 						nil,
 						datadog.rate,
 					)
