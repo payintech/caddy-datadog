@@ -40,7 +40,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 	datadog := &DatadogModule{
 		daemonAddress: "127.0.0.1:8125",
 		tags:          []string{},
-		rate:          1.0,
+		rate:          2.0,
 	}
 	glDatadogMetrics = &DatadogMetrics{}
 	for controller.Next() {
@@ -59,7 +59,11 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 					}
 				}
 			case "rate":
-				datadog.rate, _ = strconv.ParseFloat(controller.RemainingArgs()[0], 64)
+				var err = error(nil)
+				datadog.rate, err = strconv.ParseFloat(controller.RemainingArgs()[0], 64)
+				if err != nil {
+					return controller.Err("datadog: not a valid float")
+				}
 			}
 		}
 	}
