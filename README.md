@@ -30,7 +30,7 @@ In the following example, all requests on _example-d.com_ won't be harvested.
     example-d.com {
     }
 
-*Note:* As you can see on the previous example, the directive `datadog`
+**Note:** As you can see on the previous example, the directive `datadog`
 can be configured only once.
 
 
