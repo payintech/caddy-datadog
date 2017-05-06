@@ -94,20 +94,14 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 					//	glDatadogMetrics.response4xxCount,
 					//	glDatadogMetrics.response5xxCount,
 					//)
-					totalResponses := glDatadogMetrics.response1xxCount +
+					totalResponsesPeriod := glDatadogMetrics.response1xxCount +
 						glDatadogMetrics.response2xxCount +
 						glDatadogMetrics.response3xxCount +
 						glDatadogMetrics.response4xxCount +
 						glDatadogMetrics.response5xxCount
 					daemonClient.Gauge(
 						"requests.per_s",
-						totalResponses,
-						nil,
-						datadog.rate,
-					)
-					daemonClient.Gauge(
-						"requests.total",
-						totalResponses,
+						totalResponsesPeriod,
 						nil,
 						datadog.rate,
 					)
