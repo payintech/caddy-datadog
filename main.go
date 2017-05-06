@@ -45,7 +45,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 	}
 	if glDatadogMetrics == nil {
 		ipAddressRegex := regexp.MustCompile(`^[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}:[0-9]{1,5}$`)
-		tagRegex := regexp.MustCompile(`^[a-zA-Z0-9]{1,25}$`)
+		tagRegex := regexp.MustCompile(`^[a-zA-Z0-9:]{1,25}$`)
 
 		for controller.Next() {
 			for controller.NextBlock() {
@@ -62,7 +62,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 					datadog.tags = controller.RemainingArgs()
 					for idx, tag := range datadog.tags {
 						if !tagRegex.MatchString(tag) {
-							return controller.Errf("datadog: tag #%d is not valid", idx)
+							return controller.Errf("datadog: tag #%d is not valid", idx+1)
 						}
 					}
 				}
