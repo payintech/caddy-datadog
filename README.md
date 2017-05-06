@@ -19,7 +19,6 @@ In the following example, all requests on _example-d.com_ won't be harvested.
       datadog {
         statsd 127.0.0.1:8125
         tags tag1 tag2 tag3
-        rate 1
       }
     }
 
