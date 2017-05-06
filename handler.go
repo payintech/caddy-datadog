@@ -14,6 +14,7 @@ func (datadog DatadogModule) ServeHTTP(responseWriter http.ResponseWriter, reque
 		realStatus = responseRecorder.Status()
 	}
 
+	glDatadogMetrics.responseSize += float64(responseRecorder.Size())
 	switch realStatus / 100 {
 	case 1:
 		glDatadogMetrics.response1xxCount += 1
