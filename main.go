@@ -44,9 +44,11 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 		ipAddressRegex := regexp.MustCompile(`^[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}:[0-9]{1,5}$`)
 		tagRegex := regexp.MustCompile(`^[a-zA-Z0-9]{1,25}$`)
 
-		glDatadogMetrics = &DatadogMetrics{}
 		for controller.Next() {
 			for controller.NextBlock() {
+				if glDatadogMetrics == nil {
+					glDatadogMetrics = &DatadogMetrics{}
+				}
 				switch controller.Val() {
 				case "statsd":
 					datadog.daemonAddress = controller.RemainingArgs()[0]
