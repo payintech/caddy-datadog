@@ -44,3 +44,8 @@ The plugin send following metrics to Datadog:
   - caddy.responses.4xx
   - caddy.responses.5xx
   - caddy.responses.size_bytes
+
+
+
+## License
+This project is released under terms of the [MIT license](https://raw.githubusercontent.com/payintech/caddy-datadog/master/LICENSE).
