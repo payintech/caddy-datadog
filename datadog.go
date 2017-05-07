@@ -50,6 +50,7 @@ type DatadogMetrics struct {
 	response4xxCount float64
 	response5xxCount float64
 	responseSize     float64
+	responseTime     int64
 }
 
 var glDatadogMetrics *DatadogMetrics
@@ -146,12 +147,22 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 						nil,
 						STATSD_RATE,
 					)
+					if totalResponsesPeriod == 0 { // Avoid div. per zero
+						totalResponsesPeriod = 1
+					}
+					daemonClient.Gauge(
+						"responses.duration",
+						float64(glDatadogMetrics.responseTime)/totalResponsesPeriod,
+						nil,
+						STATSD_RATE,
+					)
 					glDatadogMetrics.response1xxCount = 0
 					glDatadogMetrics.response2xxCount = 0
 					glDatadogMetrics.response3xxCount = 0
 					glDatadogMetrics.response4xxCount = 0
 					glDatadogMetrics.response5xxCount = 0
 					glDatadogMetrics.responseSize = 0
+					glDatadogMetrics.responseTime = 0
 				case <-quit:
 					ticker.Stop()
 					return

@@ -26,11 +26,14 @@ package caddy_datadog
 import (
 	"github.com/mholt/caddy/caddyhttp/httpserver"
 	"net/http"
+	"time"
 )
 
 func (datadog DatadogModule) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) (int, error) {
+	timeStart := time.Now()
 	responseRecorder := httpserver.NewResponseRecorder(responseWriter)
 	status, err := datadog.Next.ServeHTTP(responseRecorder, request)
+	glDatadogMetrics.responseTime += time.Since(timeStart).Nanoseconds()
 
 	var realStatus = status
 	if realStatus == 0 {

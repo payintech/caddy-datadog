@@ -37,13 +37,16 @@ can be configured only once.
 ## Metrics
 The plugin send following metrics to Datadog:
 
-  - caddy.requests.per_s
-  - caddy.responses.1xx
-  - caddy.responses.2xx
-  - caddy.responses.3xx
-  - caddy.responses.4xx
-  - caddy.responses.5xx
-  - caddy.responses.size_bytes
+| Metric                    | Type  | Unit                |
+| ------------------------- | ----- | ------------------- |
+| caddy.requests.per_s      | Gauge | requests per second |
+| caddy.responses.1xx       | Gauge | requests            |
+| caddy.responses.2xx       | Gauge | requests            |
+| caddy.responses.3xx       | Gauge | requests            |
+| caddy.responses.4xx       | Gauge | requests            |
+| caddy.responses.5xx       | Gauge | requests            |
+| caddy.responses.size_byte | Gauge | bytes               |
+| caddy.responses.duration  | Gauge | nanoseconds         |
 
 
 
