@@ -24,159 +24,235 @@
 package caddy_datadog
 
 import (
+	"container/list"
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/mholt/caddy"
 	"github.com/mholt/caddy/caddyhttp/httpserver"
+	"reflect"
 	"regexp"
+	"strings"
+	"sync/atomic"
 	"time"
 )
 
 const (
-	SETTINGS_DEFAULT_STATSD = "127.0.0.1:8125"
-	TICKER_INTERVAL         = 10.0
-	STATSD_RATE             = 1.0
+	STATSD_SERVER    = "127.0.0.1:8125"
+	STATSD_RATE      = 1.0
+	STATSD_NAMESPACE = "caddy."
+	TICKER_INTERVAL  = 10.0
 )
 
 type DatadogModule struct {
-	Next          httpserver.Handler
-	daemonAddress string
-	tags          []string
+	Next    httpserver.Handler
+	Metrics *DatadogMetrics
 }
 
 type DatadogMetrics struct {
-	response1xxCount float64
-	response2xxCount float64
-	response3xxCount float64
-	response4xxCount float64
-	response5xxCount float64
-	responseSize     float64
-	responseTime     int64
+	area             []string
+	response1xxCount uint64
+	response2xxCount uint64
+	response3xxCount uint64
+	response4xxCount uint64
+	response5xxCount uint64
+	responseSize     uint64
+	responseTime     uint64
 }
 
-var glDatadogMetrics *DatadogMetrics
+// Handle to collected metrics.
+var glDatadogMetrics list.List
 
-func initializeDatadogHQ(controller *caddy.Controller) error {
-	datadog := &DatadogModule{
-		daemonAddress: SETTINGS_DEFAULT_STATSD,
-		tags:          []string{},
+// Handle to the statsd client.
+var glStatsdClient *statsd.Client = nil
+
+// Handle to the plugin ticker
+var glTicker *time.Ticker
+
+// Try to retrieve metrics for the given area. If no existing
+// metrics was found, a newly created metrics structure will
+// be returned.
+func getOrCreateMetrics(area []string) *DatadogMetrics {
+	if area != nil && len(area) == 0 {
+		return getOrCreateMetrics(nil)
 	}
-	if glDatadogMetrics == nil {
-		ipAddressRegex := regexp.MustCompile(`^[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}:[0-9]{1,5}$`)
-		tagRegex := regexp.MustCompile(`^[a-zA-Z0-9:]{1,25}$`)
+	for e := glDatadogMetrics.Front(); e != nil; e = e.Next() {
+		if reflect.DeepEqual(e.Value.(*DatadogMetrics).area, area) {
+			return e.Value.(*DatadogMetrics)
+		}
+	}
+	newMetrics := &DatadogMetrics{
+		area: area,
+	}
+	glDatadogMetrics.PushBack(newMetrics)
+	return newMetrics
+}
 
-		for controller.Next() {
-			for controller.NextBlock() {
-				if glDatadogMetrics == nil {
-					glDatadogMetrics = &DatadogMetrics{}
+// Reconfigure statsd client with the last know configuration.
+// If statsd is already configured; the current connection will
+// be closed and a statsd client will be reconfigured.
+func reconfigureStatsdClient(server string, namespace string, tags []string) error {
+	var err = error(nil)
+	if server != "" {
+		if glStatsdClient != nil {
+			glStatsdClient.Close()
+		}
+		glStatsdClient, err = statsd.New(server)
+	}
+	if tags == nil || len(tags) == 0 {
+		glStatsdClient.Tags = nil
+	} else {
+		glStatsdClient.Tags = tags
+	}
+	if namespace == "" {
+		glStatsdClient.Namespace = STATSD_NAMESPACE
+	} else {
+		glStatsdClient.Namespace = namespace
+	}
+	return err
+}
+
+// Initialize the Datadog module by parsing the current Caddy
+// configuration file.
+func initializeDatadogHQ(controller *caddy.Controller) error {
+	ipAddressRegex := regexp.MustCompile(`^[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}:[0-9]{1,5}$`)
+	tagRegex := regexp.MustCompile(`^[a-zA-Z0-9:]{1,25}$`)
+	namespaceRegex := regexp.MustCompile(`^[a-zA-Z0-9\\.\\-_]{2,25}$`)
+
+	if glStatsdClient == nil {
+		reconfigureStatsdClient(STATSD_SERVER, STATSD_NAMESPACE, nil)
+	}
+
+	currentDatadogModule := DatadogModule{}
+	for controller.Next() {
+		currentDatadogModule.Metrics = getOrCreateMetrics(controller.RemainingArgs())
+
+		var statsdServer, statsdNamespace, statsdTags = "", glStatsdClient.Namespace, glStatsdClient.Tags
+		for controller.NextBlock() {
+			switch controller.Val() {
+			case "statsd":
+				var args = controller.RemainingArgs()
+				if len(args) > 0 {
+					statsdServer = args[0]
+				} else {
+					statsdServer = STATSD_SERVER
 				}
-				switch controller.Val() {
-				case "statsd":
-					datadog.daemonAddress = controller.RemainingArgs()[0]
-					if !ipAddressRegex.MatchString(datadog.daemonAddress) {
-						return controller.Err("datadog: not a valid address. Must be <ip>:<port>")
+				if !ipAddressRegex.MatchString(statsdServer) {
+					return controller.Err("datadog: not a valid address. Must be <ip>:<port>")
+				}
+			case "tags":
+				statsdTags = controller.RemainingArgs()
+				for idx, tag := range statsdTags {
+					if !tagRegex.MatchString(tag) {
+						return controller.Errf("datadog: tag #%d is not valid", idx+1)
 					}
-				case "tags":
-					datadog.tags = controller.RemainingArgs()
-					for idx, tag := range datadog.tags {
-						if !tagRegex.MatchString(tag) {
-							return controller.Errf("datadog: tag #%d is not valid", idx+1)
-						}
-					}
+				}
+			case "namespace":
+				var args = controller.RemainingArgs()
+				if len(args) > 0 {
+					statsdNamespace = args[0]
+				} else {
+					statsdNamespace = STATSD_NAMESPACE
+				}
+				if !strings.HasSuffix(statsdNamespace, ".") {
+					statsdNamespace += "."
+				}
+				if !namespaceRegex.MatchString(statsdNamespace) ||
+					strings.Contains(statsdNamespace, "..") ||
+					strings.HasPrefix(statsdNamespace, ".") {
+					return controller.Err("datadog: not a valid namespace")
 				}
 			}
 		}
+		reconfigureStatsdClient(statsdServer, statsdNamespace, statsdTags)
+	}
+	httpserver.
+		GetConfig(controller).
+		AddMiddleware(func(next httpserver.Handler) httpserver.Handler {
+			currentDatadogModule.Next = next
+			return currentDatadogModule
+		})
 
-		daemonClient, err := statsd.New(datadog.daemonAddress)
-		if err != nil {
-			return err
-		}
-
-		daemonClient.Namespace = "caddy."
-		daemonClient.Tags = datadog.tags
-
-		ticker := time.NewTicker(time.Second * TICKER_INTERVAL)
+	if glTicker == nil {
+		glTicker = time.NewTicker(time.Second * TICKER_INTERVAL)
 		quit := make(chan struct{})
 		go func() {
 			for {
 				select {
-				case <-ticker.C:
-					totalResponsesPeriod := glDatadogMetrics.response1xxCount +
-						glDatadogMetrics.response2xxCount +
-						glDatadogMetrics.response3xxCount +
-						glDatadogMetrics.response4xxCount +
-						glDatadogMetrics.response5xxCount
-					daemonClient.Gauge(
-						"requests.per_s",
-						totalResponsesPeriod/TICKER_INTERVAL,
-						nil,
-						STATSD_RATE,
-					)
-					daemonClient.Gauge(
-						"responses.1xx",
-						glDatadogMetrics.response1xxCount,
-						nil,
-						STATSD_RATE,
-					)
-					daemonClient.Gauge(
-						"responses.2xx",
-						glDatadogMetrics.response2xxCount,
-						nil,
-						STATSD_RATE,
-					)
-					daemonClient.Gauge(
-						"responses.3xx",
-						glDatadogMetrics.response3xxCount,
-						nil,
-						STATSD_RATE,
-					)
-					daemonClient.Gauge(
-						"responses.4xx",
-						glDatadogMetrics.response4xxCount,
-						nil,
-						STATSD_RATE,
-					)
-					daemonClient.Gauge(
-						"responses.5xx",
-						glDatadogMetrics.response5xxCount,
-						nil,
-						STATSD_RATE,
-					)
-					daemonClient.Gauge(
-						"responses.size_bytes",
-						glDatadogMetrics.responseSize,
-						nil,
-						STATSD_RATE,
-					)
-					if totalResponsesPeriod == 0 { // Avoid div. per zero
-						totalResponsesPeriod = 1
+				case <-glTicker.C:
+					for e := glDatadogMetrics.Front(); e != nil; e = e.Next() {
+						var currentMetrics = e.Value.(*DatadogMetrics)
+
+						totalResponsesPeriod := currentMetrics.response1xxCount +
+							currentMetrics.response2xxCount +
+							currentMetrics.response3xxCount +
+							currentMetrics.response4xxCount +
+							currentMetrics.response5xxCount
+
+						glStatsdClient.Gauge(
+							"requests.per_s",
+							float64(totalResponsesPeriod)/TICKER_INTERVAL,
+							currentMetrics.area,
+							STATSD_RATE,
+						)
+						glStatsdClient.Incr(
+							"responses.1xx",
+							currentMetrics.area,
+							float64(currentMetrics.response1xxCount),
+						)
+						glStatsdClient.Gauge(
+							"responses.2xx",
+							float64(currentMetrics.response2xxCount),
+							currentMetrics.area,
+							STATSD_RATE,
+						)
+						glStatsdClient.Gauge(
+							"responses.3xx",
+							float64(currentMetrics.response3xxCount),
+							currentMetrics.area,
+							STATSD_RATE,
+						)
+						glStatsdClient.Gauge(
+							"responses.4xx",
+							float64(currentMetrics.response4xxCount),
+							currentMetrics.area,
+							STATSD_RATE,
+						)
+						glStatsdClient.Gauge(
+							"responses.5xx",
+							float64(currentMetrics.response5xxCount),
+							currentMetrics.area,
+							STATSD_RATE,
+						)
+						glStatsdClient.Gauge(
+							"responses.size_bytes",
+							float64(currentMetrics.responseSize),
+							currentMetrics.area,
+							STATSD_RATE,
+						)
+						if totalResponsesPeriod == 0 { // Avoid div. per zero
+							totalResponsesPeriod = 1
+						}
+						glStatsdClient.Gauge(
+							"responses.duration",
+							float64(currentMetrics.responseTime)/float64(totalResponsesPeriod),
+							currentMetrics.area,
+							STATSD_RATE,
+						)
+
+						atomic.AddUint64(&currentMetrics.response1xxCount, -currentMetrics.response1xxCount)
+						atomic.AddUint64(&currentMetrics.response2xxCount, -currentMetrics.response2xxCount)
+						atomic.AddUint64(&currentMetrics.response3xxCount, -currentMetrics.response3xxCount)
+						atomic.AddUint64(&currentMetrics.response4xxCount, -currentMetrics.response4xxCount)
+						atomic.AddUint64(&currentMetrics.response5xxCount, -currentMetrics.response5xxCount)
+						atomic.AddUint64(&currentMetrics.responseSize, -currentMetrics.responseSize)
+						currentMetrics.responseTime = 0
 					}
-					daemonClient.Gauge(
-						"responses.duration",
-						float64(glDatadogMetrics.responseTime)/totalResponsesPeriod,
-						nil,
-						STATSD_RATE,
-					)
-					glDatadogMetrics.response1xxCount = 0
-					glDatadogMetrics.response2xxCount = 0
-					glDatadogMetrics.response3xxCount = 0
-					glDatadogMetrics.response4xxCount = 0
-					glDatadogMetrics.response5xxCount = 0
-					glDatadogMetrics.responseSize = 0
-					glDatadogMetrics.responseTime = 0
 				case <-quit:
-					ticker.Stop()
+					glTicker.Stop()
 					return
 				}
 			}
 		}()
 	}
-
-	httpserver.
-		GetConfig(controller).
-		AddMiddleware(func(next httpserver.Handler) httpserver.Handler {
-			datadog.Next = next
-			return datadog
-		})
 
 	return nil
 }

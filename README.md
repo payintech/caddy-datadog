@@ -12,13 +12,14 @@ was needed.
 In the following example, all requests on _example-d.com_ won't be harvested.
 
     example-a.com {
-      datadog
+      datadog "area"              # area is optional
     }
 
     example-b.com {
-      datadog {
-        statsd 127.0.0.1:8125
-        tags tag1 tag2 tag3
+      datadog "area" {            # area is optional
+        statsd    127.0.0.1:8125  # Optional
+        tags      tag1 tag2 tagN  # Optional
+        namespace caddy.          # Optional
       }
     }
 

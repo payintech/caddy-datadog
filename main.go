@@ -25,6 +25,7 @@ package caddy_datadog
 
 import "github.com/mholt/caddy"
 
+// Caddy plugin entry point.
 func init() {
 	caddy.RegisterPlugin("datadog", caddy.Plugin{
 		ServerType: "http",

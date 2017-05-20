@@ -26,6 +26,7 @@ package caddy_datadog
 import (
 	"github.com/mholt/caddy/caddyhttp/httpserver"
 	"net/http"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,29 +34,29 @@ func (datadog DatadogModule) ServeHTTP(responseWriter http.ResponseWriter, reque
 	timeStart := time.Now()
 	responseRecorder := httpserver.NewResponseRecorder(responseWriter)
 	status, err := datadog.Next.ServeHTTP(responseRecorder, request)
-	glDatadogMetrics.responseTime += time.Since(timeStart).Nanoseconds()
+	atomic.AddUint64(&datadog.Metrics.responseTime, uint64(time.Since(timeStart).Nanoseconds()))
 
 	var realStatus = status
 	if realStatus == 0 {
 		realStatus = responseRecorder.Status()
 	}
 
-	glDatadogMetrics.responseSize += float64(responseRecorder.Size())
+	atomic.AddUint64(&datadog.Metrics.responseSize, uint64(responseRecorder.Size()))
 	switch realStatus / 100 {
 	case 1:
-		glDatadogMetrics.response1xxCount += 1
+		atomic.AddUint64(&datadog.Metrics.response1xxCount, 1)
 		break
 	case 2:
-		glDatadogMetrics.response2xxCount += 1
+		atomic.AddUint64(&datadog.Metrics.response2xxCount, 1)
 		break
 	case 3:
-		glDatadogMetrics.response3xxCount += 1
+		atomic.AddUint64(&datadog.Metrics.response3xxCount, 1)
 		break
 	case 4:
-		glDatadogMetrics.response4xxCount += 1
+		atomic.AddUint64(&datadog.Metrics.response4xxCount, 1)
 		break
 	default:
-		glDatadogMetrics.response5xxCount += 1
+		atomic.AddUint64(&datadog.Metrics.response5xxCount, 1)
 		break
 	}
 	return status, err
