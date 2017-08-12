@@ -48,7 +48,10 @@ type DatadogModule struct {
 }
 
 type DatadogMetrics struct {
-	area             []string
+	// Known Go bug: https://golang.org/pkg/sync/atomic/#pkg-note-BUG
+	// must be first field for 64 bit alignment
+	// on x86 and arm.
+	index            int64
 	response1xxCount uint64
 	response2xxCount uint64
 	response3xxCount uint64
@@ -56,6 +59,7 @@ type DatadogMetrics struct {
 	response5xxCount uint64
 	responseSize     uint64
 	responseTime     uint64
+	area             []string
 }
 
 // Handle to collected metrics.
@@ -165,11 +169,11 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 		reconfigureStatsdClient(statsdServer, statsdNamespace, statsdTags)
 	}
 	httpserver.
-		GetConfig(controller).
+	GetConfig(controller).
 		AddMiddleware(func(next httpserver.Handler) httpserver.Handler {
-			currentDatadogModule.Next = next
-			return currentDatadogModule
-		})
+		currentDatadogModule.Next = next
+		return currentDatadogModule
+	})
 
 	if glTicker == nil {
 		glTicker = time.NewTicker(time.Second * TICKER_INTERVAL)
