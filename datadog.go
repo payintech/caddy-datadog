@@ -117,7 +117,7 @@ func reconfigureStatsdClient(server string, namespace string, tags []string) err
 // Initialize the Datadog module by parsing the current Caddy
 // configuration file.
 func initializeDatadogHQ(controller *caddy.Controller) error {
-	ipAddressRegex := regexp.MustCompile(`^[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}.[0-9]{1,3}:[0-9]{1,5}$`)
+	hostnameRegex := regexp.MustCompile(`^[0-9a-zA-Z\\.\\-_]{1,35}:[0-9]{1,5}$`)
 	tagRegex := regexp.MustCompile(`^[a-zA-Z0-9:]{1,25}$`)
 	namespaceRegex := regexp.MustCompile(`^[a-zA-Z0-9\\.\\-_]{2,25}$`)
 
@@ -139,7 +139,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 				} else {
 					statsdServer = STATSD_SERVER
 				}
-				if !ipAddressRegex.MatchString(statsdServer) {
+				if !hostnameRegex.MatchString(statsdServer) {
 					return controller.Err("datadog: not a valid address. Must be <ip>:<port>")
 				}
 			case "tags":
@@ -169,11 +169,11 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 		reconfigureStatsdClient(statsdServer, statsdNamespace, statsdTags)
 	}
 	httpserver.
-	GetConfig(controller).
+		GetConfig(controller).
 		AddMiddleware(func(next httpserver.Handler) httpserver.Handler {
-		currentDatadogModule.Next = next
-		return currentDatadogModule
-	})
+			currentDatadogModule.Next = next
+			return currentDatadogModule
+		})
 
 	if glTicker == nil {
 		glTicker = time.NewTicker(time.Second * TICKER_INTERVAL)
