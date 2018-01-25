@@ -17,7 +17,7 @@ In the following example, all requests on _example-d.com_ won't be harvested.
 
     example-b.com {
       datadog "area" {            # area is optional
-        statsd    127.0.0.1:8125  # Optional
+        statsd    127.0.0.1:8125  # Optional - can be any valid hostname with port
         tags      tag1 tag2 tagN  # Optional
         namespace caddy.          # Optional
       }

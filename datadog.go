@@ -117,7 +117,7 @@ func reconfigureStatsdClient(server string, namespace string, tags []string) err
 // Initialize the Datadog module by parsing the current Caddy
 // configuration file.
 func initializeDatadogHQ(controller *caddy.Controller) error {
-	hostnameRegex := regexp.MustCompile(`^[0-9a-zA-Z\\.\\-_]{1,35}:[0-9]{1,5}$`)
+	hostnameRegex := regexp.MustCompile(`^[0-9a-zA-Z\\._-]{1,35}:[0-9]{1,5}$`)
 	tagRegex := regexp.MustCompile(`^[a-zA-Z0-9:]{1,25}$`)
 	namespaceRegex := regexp.MustCompile(`^[a-zA-Z0-9\\.\\-_]{2,25}$`)
 
@@ -140,7 +140,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 					statsdServer = STATSD_SERVER
 				}
 				if !hostnameRegex.MatchString(statsdServer) {
-					return controller.Err("datadog: not a valid address. Must be <ip>:<port>")
+					return controller.Err("datadog: not a valid address. Must be <hostname>:<port>")
 				}
 			case "tags":
 				statsdTags = controller.RemainingArgs()
