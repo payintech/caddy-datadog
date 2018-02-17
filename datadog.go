@@ -117,8 +117,8 @@ func reconfigureStatsdClient(server string, namespace string, tags []string) err
 // Initialize the Datadog module by parsing the current Caddy
 // configuration file.
 func initializeDatadogHQ(controller *caddy.Controller) error {
-	hostnameRegex := regexp.MustCompile(`^[0-9a-zA-Z\\._-]{1,35}:[0-9]{1,5}$`)
-	tagRegex := regexp.MustCompile(`^[a-zA-Z0-9:]{1,25}$`)
+	hostnameRegex := regexp.MustCompile(`^[0-9a-zA-Z\\._-]{1,60}:[0-9]{1,5}$`)
+	tagRegex := regexp.MustCompile(`^[a-zA-Z0-9:-]{1,25}$`)
 	namespaceRegex := regexp.MustCompile(`^[a-zA-Z0-9\\.\\-_]{2,25}$`)
 
 	if glStatsdClient == nil {
