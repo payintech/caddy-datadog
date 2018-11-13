@@ -1,6 +1,6 @@
 # Datadog plugin for Caddy HTTP/2 web server
 
-Datadog plugin allow Caddy HTTP/2 web server to send some metrics to Datadog via statsd.
+Datadog plugin allow Caddy HTTP/2 web server to send some metrics to Datadog via statsd, and optionally also send traces to Datadog APM.
 *****
 
 
@@ -16,10 +16,13 @@ In the following example, all requests on _example-d.com_ won't be harvested.
     }
 
     example-b.com {
-      datadog "area" {            # area is optional
-        statsd    127.0.0.1:8125  # Optional - can be any valid hostname with port
-        tags      tag1 tag2 tagN  # Optional
-        namespace caddy.          # Optional
+      datadog "area" {                # area is optional
+        statsd        127.0.0.1:8125  # Optional - can be any valid hostname with port
+        tags          tag1 tag2 tagN  # Optional
+        namespace     caddy.          # Optional
+        trace_enabled                 # Optional - whether to enable tracing to Datadog APM
+        trace_agent   127.0.0.1:8126  # Optional - can be any valid hostname with port
+        service_name  caddy           # Optional
       }
     }
 

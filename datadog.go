@@ -28,8 +28,10 @@ import (
 	"github.com/DataDog/datadog-go/statsd"
 	"github.com/mholt/caddy"
 	"github.com/mholt/caddy/caddyhttp/httpserver"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -40,6 +42,8 @@ const (
 	STATSD_RATE      = 1.0
 	STATSD_NAMESPACE = "caddy."
 	TICKER_INTERVAL  = 10.0
+	TRACE_AGENT      = "127.0.0.1:8126"
+	SERVICE_NAME     = "caddy"
 )
 
 type DatadogModule struct {
@@ -120,6 +124,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 	hostnameRegex := regexp.MustCompile(`^[0-9a-zA-Z\\._-]{1,100}:[0-9]{1,5}$`)
 	tagRegex := regexp.MustCompile(`^[a-zA-Z0-9:_-]{1,100}$`)
 	namespaceRegex := regexp.MustCompile(`^[a-zA-Z0-9\\.\\-_]{2,25}$`)
+	serviceRegex := regexp.MustCompile(`^[a-zA-Z0-9\\.\\-_]{1,100}$`)
 
 	if glStatsdClient == nil {
 		reconfigureStatsdClient(STATSD_SERVER, STATSD_NAMESPACE, nil)
@@ -130,6 +135,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 		currentDatadogModule.Metrics = getOrCreateMetrics(controller.RemainingArgs())
 
 		var statsdServer, statsdNamespace, statsdTags = "", glStatsdClient.Namespace, glStatsdClient.Tags
+		var traceEnabled, traceAgent, serviceName = false, "", ""
 		for controller.NextBlock() {
 			switch controller.Val() {
 			case "statsd":
@@ -164,7 +170,41 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 					strings.HasPrefix(statsdNamespace, ".") {
 					return controller.Err("datadog: not a valid namespace")
 				}
+			case "trace_enabled":
+				var args = controller.RemainingArgs()
+				var err error
+				if len(args) > 0 {
+					traceEnabled, err = strconv.ParseBool(args[0])
+				} else {
+					traceEnabled = true
+				}
+				if err != nil {
+					return controller.Err("datadog: not a valid boolean value for trace_enabled")
+				}
+			case "trace_agent":
+				var args = controller.RemainingArgs()
+				if len(args) > 0 {
+					traceAgent = args[0]
+				} else {
+					traceAgent = TRACE_AGENT
+				}
+				if !hostnameRegex.MatchString(traceAgent) {
+					return controller.Err("datadog: not a valid trace_agent address. Must be <hostname>:<port>")
+				}
+			case "service_name":
+				var args = controller.RemainingArgs()
+				if len(args) > 0 {
+					traceAgent = args[0]
+				} else {
+					traceAgent = SERVICE_NAME
+				}
+				if !serviceRegex.MatchString(traceAgent) {
+					return controller.Err("datadog: not a valid service")
+				}
 			}
+		}
+		if traceEnabled {
+			tracer.Start(tracer.WithAgentAddr(traceAgent), tracer.WithServiceName(serviceName))
 		}
 		reconfigureStatsdClient(statsdServer, statsdNamespace, statsdTags)
 	}
@@ -252,6 +292,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 					}
 				case <-quit:
 					glTicker.Stop()
+					tracer.Stop()
 					return
 				}
 			}

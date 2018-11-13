@@ -25,6 +25,9 @@ package caddy_datadog
 
 import (
 	"github.com/mholt/caddy/caddyhttp/httpserver"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/ext"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -33,6 +36,16 @@ import (
 func (datadog DatadogModule) ServeHTTP(responseWriter http.ResponseWriter, request *http.Request) (int, error) {
 	timeStart := time.Now()
 	responseRecorder := httpserver.NewResponseRecorder(responseWriter)
+	spanContext, _ := tracer.Extract(tracer.HTTPHeadersCarrier(request.Header))
+	spanOptions := []ddtrace.StartSpanOption{
+		tracer.ResourceName(request.Method), // TODO: change this to a more useful resource name
+		tracer.SpanType(ext.SpanTypeWeb),
+		tracer.ChildOf(spanContext),
+		tracer.Tag(ext.HTTPMethod, request.Method),
+		tracer.Tag(ext.HTTPURL, request.URL.Path),
+	}
+	span := tracer.StartSpan("caddy.request", spanOptions...)
+	tracer.Inject(span.Context(), tracer.HTTPHeadersCarrier(request.Header))
 	status, err := datadog.Next.ServeHTTP(responseRecorder, request)
 	atomic.AddUint64(&datadog.Metrics.responseTime, uint64(time.Since(timeStart).Nanoseconds()))
 
@@ -40,6 +53,10 @@ func (datadog DatadogModule) ServeHTTP(responseWriter http.ResponseWriter, reque
 	if realStatus == 0 {
 		realStatus = responseRecorder.Status()
 	}
+
+	span.SetTag(ext.HTTPCode, realStatus)
+	span.SetTag(ext.Error, err)
+	span.Finish()
 
 	atomic.AddUint64(&datadog.Metrics.responseSize, uint64(responseRecorder.Size()))
 	switch realStatus / 100 {
@@ -59,5 +76,6 @@ func (datadog DatadogModule) ServeHTTP(responseWriter http.ResponseWriter, reque
 		atomic.AddUint64(&datadog.Metrics.response5xxCount, 1)
 		break
 	}
+
 	return status, err
 }
