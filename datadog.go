@@ -135,7 +135,7 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 		currentDatadogModule.Metrics = getOrCreateMetrics(controller.RemainingArgs())
 
 		var statsdServer, statsdNamespace, statsdTags = "", glStatsdClient.Namespace, glStatsdClient.Tags
-		var traceEnabled, traceAgent, serviceName = false, "", ""
+		var traceEnabled, traceAgent, serviceName = false, TRACE_AGENT, SERVICE_NAME
 		for controller.NextBlock() {
 			switch controller.Val() {
 			case "statsd":
@@ -194,11 +194,11 @@ func initializeDatadogHQ(controller *caddy.Controller) error {
 			case "service_name":
 				var args = controller.RemainingArgs()
 				if len(args) > 0 {
-					traceAgent = args[0]
+					serviceName = args[0]
 				} else {
-					traceAgent = SERVICE_NAME
+					serviceName = SERVICE_NAME
 				}
-				if !serviceRegex.MatchString(traceAgent) {
+				if !serviceRegex.MatchString(serviceName) {
 					return controller.Err("datadog: not a valid service")
 				}
 			}
