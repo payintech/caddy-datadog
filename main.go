@@ -23,7 +23,7 @@
  */
 package caddy_datadog
 
-import "github.com/mholt/caddy"
+import "github.com/caddyserver/caddy"
 
 // Caddy plugin entry point.
 func init() {
